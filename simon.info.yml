@@ -1,0 +1,22 @@
+name: SIMON Integration
+type: module
+description: 'Integrates Drupal sites with SIMON monitoring system'
+core_version_requirement: ^10 || ^11
+package: Monitoring
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

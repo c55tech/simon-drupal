@@ -1,0 +1,357 @@
+<?php
+
+/**
+ * @file
+ * SIMON Integration module for Drupal.
+ */
+
+use Drupal\Core\Routing\RouteMatchInterface;
+
+/**
+ * Implements hook_help().
+ */
+function simon_help($route_name, RouteMatchInterface $route_match) {
+  switch ($route_name) {
+    case 'help.page.simon':
+      $output = '';
+      $output .= '<h3>' . t('About') . '</h3>';
+      $output .= '<p>' . t('SIMON Integration allows your Drupal site to send monitoring data to a SIMON server.') . '</p>';
+      return $output;
+
+    default:
+  }
+}
+
+/**
+ * Implements hook_cron().
+ */
+function simon_cron() {
+  $config = \Drupal::config('simon.settings');
+  
+  // Check if cron submission is enabled
+  if (!$config->get('enable_cron')) {
+    return;
+  }
+  
+  // Check last submission time
+  $last_submission = $config->get('last_cron_submission') ?? 0;
+  $interval = $config->get('cron_interval') ?? 86400;
+  $now = time();
+  
+  // Only submit if interval has passed
+  if (($now - $last_submission) < $interval) {
+    return;
+  }
+  
+  // Check if we have required configuration
+  $api_url = $config->get('api_url');
+  $client_id = $config->get('client_id');
+  $site_id = $config->get('site_id');
+  
+  if (empty($api_url) || empty($client_id) || empty($site_id)) {
+    \Drupal::logger('simon')->warning('SIMON cron skipped: Missing configuration (API URL, Client ID, or Site ID)');
+    return;
+  }
+  
+  // Submit site data
+  try {
+    $result = _simon_submit_data($api_url, $client_id, $site_id);
+    if ($result) {
+      // Update last submission time
+      \Drupal::configFactory()->getEditable('simon.settings')
+        ->set('last_cron_submission', $now)
+        ->save();
+      \Drupal::logger('simon')->info('SIMON data submitted successfully via cron');
+    } else {
+      \Drupal::logger('simon')->error('SIMON cron submission failed');
+    }
+  } catch (\Exception $e) {
+    \Drupal::logger('simon')->error('SIMON cron error: @message', ['@message' => $e->getMessage()]);
+  }
+}
+
+/**
+ * Submit site data to SIMON API.
+ *
+ * @param string $api_url
+ *   Base API URL.
+ * @param int $client_id
+ *   Client ID.
+ * @param int $site_id
+ *   Site ID.
+ *
+ * @return bool
+ *   TRUE if successful, FALSE otherwise.
+ */
+function _simon_submit_data($api_url, $client_id, $site_id) {
+  $data = _simon_collect_site_data();
+  
+  // Get module auth_key from config (same key used for all API operations)
+  $config = \Drupal::config('simon.settings');
+  $auth_key = $config->get('auth_key');
+  
+  if (empty($auth_key)) {
+    \Drupal::logger('simon')->error('SIMON auth_key not configured. Please configure it in SIMON Settings.');
+    return FALSE;
+  }
+  
+  $payload = [
+    'client_id' => (int) $client_id,
+    'site_id' => (int) $site_id,
+    'core' => $data['core'],
+    'log_summary' => $data['log_summary'],
+    'environment' => $data['environment'],
+    'extensions' => $data['extensions'],
+    'themes' => $data['themes'],
+    'auth_key' => $auth_key,
+  ];
+  
+  $url = rtrim($api_url, '/') . '/api/intake';
+  
+  $client = \Drupal::httpClient();
+  try {
+    $response = $client->post($url, [
+      'json' => $payload,
+      'headers' => [
+        'X-Auth-Key' => $auth_key,
+      ],
+      'timeout' => 30,
+    ]);
+    
+    $status_code = $response->getStatusCode();
+    $response_body_content = $response->getBody()->getContents();
+    
+    if ($status_code >= 200 && $status_code < 300) {
+      $body = json_decode($response_body_content, TRUE);
+      \Drupal::logger('simon')->info('SIMON submission successful. Snapshot ID: @id', [
+        '@id' => $body['snapshot_id'] ?? 'N/A',
+      ]);
+      return TRUE;
+    }
+    
+    // Debug: Log error response
+    \Drupal::logger('simon')->error('SIMON API submission failed. Status: @status. Response: @response', [
+      '@status' => $status_code,
+      '@response' => $response_body_content,
+    ]);
+    
+    return FALSE;
+  } catch (\Exception $e) {
+    $error_message = $e->getMessage();
+    
+    // Debug: Log detailed exception
+    \Drupal::logger('simon')->error('SIMON API error: @message | File: @file | Line: @line', [
+      '@message' => $error_message,
+      '@file' => $e->getFile(),
+      '@line' => $e->getLine(),
+    ]);
+    
+    return FALSE;
+  }
+}
+
+/**
+ * Collect site data for submission.
+ *
+ * @return array
+ *   Site data array.
+ */
+function _simon_collect_site_data() {
+  $data = [];
+  
+  // Core version and status
+  $core_version = \Drupal::VERSION;
+  $data['core'] = [
+    'version' => $core_version,
+    'status' => _simon_get_core_status($core_version),
+  ];
+  
+  // Log summary
+  $data['log_summary'] = _simon_get_log_summary();
+  
+  // Environment
+  $data['environment'] = _simon_get_environment();
+  
+  // Extensions (modules)
+  $data['extensions'] = _simon_get_extensions();
+  
+  // Themes
+  $data['themes'] = _simon_get_themes();
+  
+  return $data;
+}
+
+/**
+ * Get core status.
+ */
+function _simon_get_core_status($version) {
+  // Return a default status. Checking for updates requires fetching data
+  // from drupal.org and can be unreliable. For now, we'll default to
+  // 'up-to-date' to avoid errors. This can be enhanced later with proper
+  // update checking via the update module's API if needed.
+  return 'up-to-date';
+}
+
+/**
+ * Get log summary.
+ */
+function _simon_get_log_summary() {
+  $database = \Drupal::database();
+  $summary = [
+    'total' => 0,
+    'error' => 0,
+    'warning' => 0,
+    'by_level' => [],
+  ];
+  
+  // Check if watchdog table exists
+  try {
+    $query = $database->select('watchdog', 'w');
+    $query->addExpression('COUNT(*)', 'total');
+    $total = $query->execute()->fetchField();
+    $summary['total'] = (int) $total;
+    
+    // Count by severity
+    $query = $database->select('watchdog', 'w');
+    $query->addField('w', 'severity');
+    $query->addExpression('COUNT(*)', 'count');
+    $query->groupBy('severity');
+    $results = $query->execute()->fetchAll();
+    
+    $level_map = [
+      0 => 'emergency',
+      1 => 'alert',
+      2 => 'critical',
+      3 => 'error',
+      4 => 'warning',
+      5 => 'notice',
+      6 => 'info',
+      7 => 'debug',
+    ];
+    
+    foreach ($results as $row) {
+      $level = $level_map[$row->severity] ?? 'notice';
+      $count = (int) $row->count;
+      
+      if ($level === 'error') {
+        $summary['error'] += $count;
+      } elseif ($level === 'warning') {
+        $summary['warning'] += $count;
+      }
+      
+      $summary['by_level'][] = [
+        'level' => $level,
+        'count' => $count,
+      ];
+    }
+  } catch (\Exception $e) {
+    \Drupal::logger('simon')->warning('Could not collect log summary: @message', [
+      '@message' => $e->getMessage(),
+    ]);
+  }
+  
+  return $summary;
+}
+
+/**
+ * Get environment information.
+ */
+function _simon_get_environment() {
+  $env = [
+    'php_version' => PHP_VERSION,
+    'memory_limit' => ini_get('memory_limit'),
+    'max_execution_time' => (int) ini_get('max_execution_time'),
+    'max_input_vars' => (int) ini_get('max_input_vars'),
+    'web_server' => $_SERVER['SERVER_SOFTWARE'] ?? 'unknown',
+    'database_type' => \Drupal::database()->driver(),
+    'database_version' => _simon_get_database_version(),
+    'php_modules' => get_loaded_extensions(),
+  ];
+  
+  return $env;
+}
+
+/**
+ * Get database version.
+ */
+function _simon_get_database_version() {
+  $database = \Drupal::database();
+  $driver = $database->driver();
+  
+  try {
+    if ($driver === 'mysql') {
+      $version = $database->query("SELECT VERSION()")->fetchField();
+      return $version;
+    } elseif ($driver === 'pgsql') {
+      $version = $database->query("SELECT version()")->fetchField();
+      return $version;
+    }
+  } catch (\Exception $e) {
+    // Fallback
+  }
+  
+  return 'unknown';
+}
+
+/**
+ * Get installed extensions (modules).
+ */
+function _simon_get_extensions() {
+  $extensions = [];
+  $module_handler = \Drupal::moduleHandler();
+  $module_list = $module_handler->getModuleList();
+  
+  foreach ($module_list as $module_name => $module) {
+    $info = \Drupal::service('extension.list.module')->getExtensionInfo($module_name);
+    
+    $extensions[] = [
+      'type' => 'module',
+      'machine_name' => $module_name,
+      'human_name' => $info['name'] ?? $module_name,
+      'version' => $info['version'] ?? 'unknown',
+      'status' => $module_handler->moduleExists($module_name) ? 'enabled' : 'disabled',
+      'is_custom' => _simon_is_custom_module($module_name),
+    ];
+  }
+  
+  return $extensions;
+}
+
+/**
+ * Check if module is custom (not in core or contrib).
+ */
+function _simon_is_custom_module($module_name) {
+  $module_path = \Drupal::service('extension.list.module')->getPath($module_name);
+  // Custom modules are typically in modules/custom or sites/*/modules/custom
+  return strpos($module_path, '/custom/') !== FALSE || strpos($module_path, 'sites/') !== FALSE;
+}
+
+/**
+ * Get installed themes.
+ */
+function _simon_get_themes() {
+  $themes = [];
+  $theme_handler = \Drupal::service('theme_handler');
+  $theme_list = $theme_handler->listInfo();
+  
+  foreach ($theme_list as $theme_name => $theme) {
+    $themes[] = [
+      'machine_name' => $theme_name,
+      'human_name' => $theme->info['name'] ?? $theme_name,
+      'version' => $theme->info['version'] ?? 'unknown',
+      'status' => ($theme_name === \Drupal::theme()->getActiveTheme()->getName()) ? 'default' : 'enabled',
+      'is_custom' => _simon_is_custom_theme($theme_name),
+    ];
+  }
+  
+  return $themes;
+}
+
+/**
+ * Check if theme is custom.
+ */
+function _simon_is_custom_theme($theme_name) {
+  $theme_path = \Drupal::service('extension.list.theme')->getPath($theme_name);
+  return strpos($theme_path, '/custom/') !== FALSE || strpos($theme_path, 'sites/') !== FALSE;
+}
+

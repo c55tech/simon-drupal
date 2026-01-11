@@ -1,0 +1,23 @@
+services:
+  simon.submit_command:
+    class: Drupal\simon\Command\SimonSubmitCommand
+    arguments: ['@config.factory']
+    tags:
+      - { name: drush.command }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

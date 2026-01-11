@@ -1,0 +1,21 @@
+simon.config:
+  title: 'SIMON'
+  description: 'Configure SIMON monitoring integration'
+  route_name: simon.settings
+  parent: system.admin_config_services
+  weight: 10
+
+simon.client:
+  title: 'SIMON Client'
+  description: 'Configure SIMON client information'
+  route_name: simon.client
+  parent: system.admin_config_services
+  weight: 11
+
+simon.site:
+  title: 'SIMON Site'
+  description: 'Configure SIMON site information'
+  route_name: simon.site
+  parent: system.admin_config_services
+  weight: 12
+

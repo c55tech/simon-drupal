@@ -1,0 +1,56 @@
+simon.settings:
+  path: '/admin/config/services/simon'
+  defaults:
+    _form: '\Drupal\simon\Form\SimonSettingsForm'
+    _title: 'SIMON Settings'
+  requirements:
+    _permission: 'administer simon'
+  options:
+    _admin_route: TRUE
+
+simon.client:
+  path: '/admin/config/services/simon/client'
+  defaults:
+    _form: '\Drupal\simon\Form\SimonClientForm'
+    _title: 'SIMON Client Configuration'
+  requirements:
+    _permission: 'administer simon'
+  options:
+    _admin_route: TRUE
+
+simon.site:
+  path: '/admin/config/services/simon/site'
+  defaults:
+    _form: '\Drupal\simon\Form\SimonSiteForm'
+    _title: 'SIMON Site Configuration'
+  requirements:
+    _permission: 'administer simon'
+  options:
+    _admin_route: TRUE
+
+simon.clear_cache:
+  path: '/simon/cr'
+  defaults:
+    _controller: '\Drupal\simon\Controller\SimonApiController::clearCache'
+    _title: 'SIMON Clear Cache'
+  requirements:
+    _access: 'TRUE'
+
+simon.execute_cron:
+  path: '/simon/cron'
+  defaults:
+    _controller: '\Drupal\simon\Controller\SimonApiController::executeCron'
+    _title: 'SIMON Execute Cron'
+  requirements:
+    _access: 'TRUE'
+
+simon.heartbeat:
+  path: '/simon/heartbeat'
+  defaults:
+    _controller: '\Drupal\simon\Controller\SimonApiController::heartbeat'
+    _title: 'SIMON Heartbeat'
+  requirements:
+    _access: 'TRUE'
+
+
+
