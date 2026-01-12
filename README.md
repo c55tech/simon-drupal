@@ -6,14 +6,29 @@ Drupal module for integrating with the SIMON monitoring system.
 
 ### Via Composer (Recommended)
 
-Add the repository to your `composer.json`:
+Add the repository using Composer commands:
+
+```bash
+# Add the repository
+composer config repositories.simon-drupal vcs git@github.c55:c55tech/simon-drupal.git
+
+# Install the module
+composer require simon/integration:dev-main
+
+# Enable the module
+drush en simon
+```
+
+Or via the admin UI: Extend → Install → SIMON Integration
+
+Alternatively, you can manually add the repository to your `composer.json`:
 
 ```json
 {
   "repositories": [
     {
       "type": "vcs",
-      "url": "https://github.com/c55tech/simon-drupal"
+      "url": "git@github.c55:c55tech/simon-drupal.git"
     }
   ],
   "require": {
@@ -28,8 +43,6 @@ Then install:
 composer require simon/integration:dev-main
 drush en simon
 ```
-
-Or via the admin UI: Extend → Install → SIMON Integration
 
 ### Manual Installation
 
