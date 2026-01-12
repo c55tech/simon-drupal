@@ -4,6 +4,35 @@ Drupal module for integrating with the SIMON monitoring system.
 
 ## Installation
 
+### Via Composer (Recommended)
+
+Add the repository to your `composer.json`:
+
+```json
+{
+  "repositories": [
+    {
+      "type": "vcs",
+      "url": "https://github.com/c55tech/simon-drupal"
+    }
+  ],
+  "require": {
+    "simon/integration": "dev-main"
+  }
+}
+```
+
+Then install:
+
+```bash
+composer require simon/integration:dev-main
+drush en simon
+```
+
+Or via the admin UI: Extend → Install → SIMON Integration
+
+### Manual Installation
+
 1. Copy this module to your Drupal site's `modules/custom/` directory:
    ```bash
    cp -r simon-drupal /path/to/drupal/modules/custom/simon
