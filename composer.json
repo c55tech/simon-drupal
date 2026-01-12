@@ -19,9 +19,9 @@
     ],
     "support": {
         "email": "support@simon.example.com",
-        "issues": "https://github.com/your-org/simon/issues",
-        "source": "https://github.com/your-org/simon",
-        "docs": "https://github.com/your-org/simon/blob/main/modules/simon-drupal/README.md"
+        "issues": "https://github.com/c55tech/simon-drupal/issues",
+        "source": "https://github.com/c55tech/simon-drupal",
+        "docs": "https://github.com/c55tech/simon-drupal/blob/main/README.md"
     },
     "require": {
         "php": ">=8.1",
