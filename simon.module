@@ -103,6 +103,7 @@ function _simon_submit_data($api_url, $client_id, $site_id) {
     'environment' => $data['environment'],
     'extensions' => $data['extensions'],
     'themes' => $data['themes'],
+    'application_type' => 'drupal',
     'auth_key' => $auth_key,
   ];
   
